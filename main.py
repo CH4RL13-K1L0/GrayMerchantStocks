@@ -14,14 +14,18 @@ print(" \\____/_|  \\__,_|\\__, | \\_|  |_/\\___|_|  \\___|_| |_|\\__,_|_| |_|\\
 print("----------------------Your personal advisor-------------------------\n")
 
 company = input("What company's stocks do you want to look at? (Enter their index)\n") #Select company
+validPeriods = {"5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"} #Creates an array of valid periods for error handling later
+
 while True:
     dateOrPeriod = input("Choose whether you want to see results for a specific time range (r) or for a period (p)\n") #Choose the data display mode (by period or range)
     if dateOrPeriod == "p": #For period selected
-        period = input("Select a period: (Available periods are 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max)\n") #Select period
-        intervalHour = "1d"
-        if period == "1d":
-            intervalHour = "1h" #Handle periods less than one day
-        stockData = yf.download(company, period=period, auto_adjust=True, interval=intervalHour) #Grab financial data
+        while True:
+            period = input("Select a period: (Available periods are 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max)\n") #Select period
+            if period in validPeriods:
+                stockData = yf.download(company, period=period, auto_adjust=True) #Grab financial data
+                break
+            else:
+                print("Invalid input, please try again\n")  # loops the code if an invalid statement is given
     elif dateOrPeriod == "r": #For range selected
         startDate = input("Select a start date (format: Year-Month-Date)\n")
         endDate = input("Select an end date (format: Year-Month-Date)\n")
@@ -29,9 +33,13 @@ while True:
     else:
         print("Invalid input, please try again") #loops the code if an invalid statement is given
 
-    print(stockData.head()) #prints the stock data
     fileName = f"{company}StockData.xlsx"
-    stockData.to_excel(fileName, engine='openpyxl') #Send the data to an Excel sheet
+
+    if stockData.empty:
+        print("Error: No data found for the given stock ticker. Please check the ticker and try again. If the error persists, check your internet connection.\n")
+    else:
+        print(stockData.head()) #prints the stock data
+        stockData.to_excel(fileName, engine='openpyxl') #Send the data to an Excel sheet
 
     wb = load_workbook(fileName) #establish the workbook
     ws = wb.active #make the worksheet the active workbook
@@ -57,6 +65,6 @@ while True:
 
     wb.save(fileName) #saves the current workbook under the above filename
     print(f"Data successfully saved to {fileName}")
-    break
 
+    break
     #What to do next: Add conditional formatting automatically, start brainstorming new features
