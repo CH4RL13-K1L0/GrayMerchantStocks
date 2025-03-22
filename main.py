@@ -1,6 +1,12 @@
+from typing import Pattern
+
 import yfinance as yf
+from numpy.ma.core import choose
 from openpyxl import load_workbook
 from openpyxl.chart import LineChart, Reference, AreaChart
+from openpyxl.formatting.rule import CellIsRule
+from openpyxl.styles import PatternFill
+from copy import copy
 
 stockData = "empty" #Declare stockData outside an if statement
 
@@ -13,8 +19,8 @@ print("| |_\\ \\ | | (_| | |_| | | |  | |  __/ | | (__| | | | (_| | | | | |_ ")
 print(" \\____/_|  \\__,_|\\__, | \\_|  |_/\\___|_|  \\___|_| |_|\\__,_|_| |_|\\__|")
 print("----------------------Your personal advisor-------------------------\n")
 
-company = input("What company's stocks do you want to look at? (Enter their index)\n") #Select company
-validPeriods = {"5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"} #Creates an array of valid periods for error handling later
+company = input("What company's stocks do you want to look at? (Enter their ticker)\n") #Select company
+validPeriods = {"5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"} #Creates a matrix of valid periods for error handling later
 
 while True:
     dateOrPeriod = input("Choose whether you want to see results for a specific time range (r) or for a period (p)\n") #Choose the data display mode (by period or range)
@@ -44,6 +50,41 @@ while True:
     wb = load_workbook(fileName) #establish the workbook
     ws = wb.active #make the worksheet the active workbook
 
+    green = PatternFill(start_color="00FF7F", end_color="00FF7F", fill_type="solid")
+    red = PatternFill(start_color="FF2800", end_color="FF2800", fill_type="solid")
+
+    ws["G1"] = "Change"
+    ws["G1"].font = copy(ws["F1"].font)
+    ws["G1"].alignment = copy(ws["F1"].alignment)
+    ws["G1"].fill = copy(ws["F1"].fill)
+    ws["G1"].border = copy(ws["F1"].border)
+    column = "B"
+
+    ws.conditional_formatting.add(
+        f"{column}2:{column}{ws.max_row}",
+        CellIsRule(operator="greaterThan", formula=["B1"], stopIfTrue=False, fill=green)
+    )
+    ws.conditional_formatting.add(
+        f"{column}2:{column}{ws.max_row}",
+        CellIsRule(operator="lessThan", formula=["B1"], stopIfTrue=False, fill=red)
+    )
+
+    i = 5
+    ws["G5"].value = "=B5-B4"
+    while i <= ws.max_row:
+        ws[f"G{i}"] = f"=B{i}-B{i - 1}"
+        i += 1
+
+    column2 = "G"
+    ws.conditional_formatting.add(
+        f"{column2}2:{column2}{ws.max_row}",
+        CellIsRule(operator="greaterThan", formula=["0"], stopIfTrue=False, fill=green)
+    )
+    ws.conditional_formatting.add(
+        f"{column2}2:{column2}{ws.max_row}",
+        CellIsRule(operator="lessThan", formula=["0"], stopIfTrue=False, fill=red)
+    )
+
     chart = LineChart() #Creates the line chart
     chart.smooth = False
     chart.style = 12
@@ -61,10 +102,10 @@ while True:
     for series in chart.series: #Makes the line appear smooth
         series.smooth = False
 
-    ws.add_chart(chart, "H2") #Moves the chart to cell H2
+    ws.add_chart(chart, "I2") #Moves the chart to cell I2
 
     wb.save(fileName) #saves the current workbook under the above filename
     print(f"Data successfully saved to {fileName}")
 
     break
-    #What to do next: Add conditional formatting automatically, start brainstorming new features
+    #What to do next: Start brainstorming new features
