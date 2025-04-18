@@ -1,6 +1,9 @@
 #Imports
 from typing import Pattern
 import yfinance as yf
+import openpyxl
+import pandas as pd
+import numpy as np
 from numpy.ma.core import choose
 from openpyxl import load_workbook
 from openpyxl.chart import LineChart, Reference, AreaChart
@@ -23,35 +26,27 @@ validPeriods = {"5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"
 maxLength = 0
 movingAverageOption = 0
 
-
-print("""--------------------------------------------------------------------
- _____                  ___  ___              _                 _   
-|  __ \\                 |  \\/  |             | |               | |  
-| |  \\/_ __ __ _ _   _  | .  . | ___ _ __ ___| |__   __ _ _ __ | |_ 
-| | __| '__/ _` | | | | | |\\/| |/ _ \\ '__/ __| '_ \\ / _` | '_ \\| __|
-| |_\\ \\ | | (_| | |_| | | |  | |  __/ | | (__| | | | (_| | | | | |_ 
- \\____/_|  \\__,_|\\__, | \\_|  |_/\\___|_|  \\___|_| |_|\\__,_|_| |_|\\__|
-----------------------Your personal advisor-------------------------
-""")
-
 company = input("What company's stocks do you want to look at? (Enter their ticker)\n") #Select company
 
 while True:
-    dateOrPeriod = input("Choose whether you want to see results for a specific time range or for a period. r/p\n") #Choose the data display mode (by period or range)
-    if dateOrPeriod == "p": #For period selected
-        while True:
-            period = input("Select a period: (Available periods are 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max)\n") #Select period
-            if period in validPeriods:
-                stockData = yf.download(company, period=period, auto_adjust=True) #Grab financial data
-                break
-            else:
-                print("Invalid input, please try again\n")  # loops the code if an invalid statement is given
-    elif dateOrPeriod == "r": #For range selected
-        startDate = input("Select a start date (format: Year-Month-Date)\n")
-        endDate = input("Select an end date (format: Year-Month-Date)\n")
-        stockData = yf.download(company, start=startDate, end=endDate, auto_adjust=True)
-    else:
-        print("Invalid input, please try again") #loops the code if an invalid statement is given
+    while True:
+        dateOrPeriod = input("Choose whether you want to see results for a specific time range or for a period. r/p\n")  # Choose the data display mode (by period or range)
+        if dateOrPeriod == "p": #For period selected
+            while True:
+                period = input("Select a period: (Available periods are 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max)\n") #Select period
+                if period in validPeriods:
+                    stockData = yf.download(company, period=period, auto_adjust=True) #Grab financial data
+                    break
+                else:
+                    print("Invalid input, please try again\n")  # loops the code if an invalid statement is given
+            break
+        elif dateOrPeriod == "r": #For range selected
+            startDate = input("Select a start date (format: Year-Month-Date)\n")
+            endDate = input("Select an end date (format: Year-Month-Date)\n")
+            stockData = yf.download(company, start=startDate, end=endDate, auto_adjust=True)
+            break
+        else:
+            print("Invalid input, please try again") #loops the code if an invalid statement is given
 
     fileName = f"{company}StockData.xlsx"
 
@@ -59,23 +54,15 @@ while True:
         print("Error: No data found for the given stock ticker. Please check the ticker and try again. If the error persists, check your internet connection.\n")
     else:
         print(f"{stockData.head()}\n") #prints the stock data
-        while True:
-            movingAverageOption = input("Do you want Exponential or Simple moving averages? E/S\n")
-            if movingAverageOption == "S":
-                stockData["SMA_10"] = stockData["Close"].rolling(window=10).mean() #Uses panda to calculate a simple moving average (SMA)
-                stockData["SMA_50"] = stockData["Close"].rolling(window=50).mean()
-                stockData["SMA_200"] = stockData["Close"].rolling(window=200).mean()
-                break
-            elif movingAverageOption == "E":
-                stockData["EMA_10"] = stockData["Close"].ewm(span=10, adjust=False).mean() #Uses panda to calculate an exponential moving average (EMA)
-                stockData["EMA_50"] = stockData["Close"].ewm(span=50, adjust=False).mean()
-                stockData["EMA_200"] = stockData["Close"].ewm(span=200, adjust=False).mean()
-                break
-            else:
-                print("Invalid argument, try again")
+        stockData["EMA_20"] = stockData["Close"].ewm(span=20, adjust=False).mean()  # Uses panda to calculate an exponential moving average (EMA)
+        stockData["EMA_50"] = stockData["Close"].ewm(span=50, adjust=False).mean()
+        stockData["EMA_200"] = stockData["Close"].ewm(span=200, adjust=False).mean()
+        stockData["STD"] = stockData["Close"].rolling(window=20).std()
+        stockData["Upper Band"] = stockData["EMA_20"] + (2 * stockData["STD"])
+        stockData["Lower Band"] = stockData["EMA_20"] - (2 * stockData["STD"])
         stockData.to_excel(fileName, engine='openpyxl') #Send the data to an Excel sheet
 
-    wb = load_workbook(fileName) #establish the workbook
+    wb = load_workbook(fileName) #establish the workbook without printing formulas
     ws = wb.active #make the worksheet the active workbook
 
     for col in ws.columns:
@@ -87,9 +74,9 @@ while True:
             else:
                 maxLength = max(maxLength, len(str(cell.value))) #Track the max length of non-numeric values
 
-        ws.column_dimensions[colLetter].width = maxLength + 1 #Extends the cells to fit the contents
+        ws.column_dimensions[colLetter].width = maxLength #Extends the cells to fit the contents
 
-    ws["J1"] = "Change"
+    ws["J1"] = "Change" #Adds a change column
     ws["J1"].font = copy(ws["F1"].font)
     ws["J1"].alignment = copy(ws["F1"].alignment)
     ws["J1"].fill = copy(ws["F1"].fill)
@@ -136,7 +123,7 @@ while True:
         for cell in row:
             cell.number_format = "0.00"
 
-    ws.conditional_formatting.add(
+    ws.conditional_formatting.add( #Add more to non-pandas data
         f"{column2}2:{column2}{ws.max_row}",
         CellIsRule(operator="greaterThan", formula=["0"], stopIfTrue=False, font=greenFont)
     )
@@ -148,29 +135,35 @@ while True:
     chart = LineChart() #Creates the line chart
     chart.smooth = False
     chart.style = 12
-    chart.height = 30
-    chart.width = 21
-    chart.title = "Stock prices with moving average"
+    chart.height = 23
+    chart.width = 30
+    chart.title = f"Stock prices for {company}"
     chart.x_axis.title = "Date"
     chart.y_axis.title = "Price"
 
     data = Reference(ws, min_col=2, min_row=4, max_row=ws.max_row) #Takes the data needed for the chart from the inputted data for the data
-    movingAverageReference10 = Reference(ws, min_col=7, min_row=4, max_row=ws.max_row) #Creates a chart reference for the moving averages from before
+    movingAverageReference20 = Reference(ws, min_col=7, min_row=4, max_row=ws.max_row) #Creates a chart reference for the moving averages from before
     movingAverageReference50 = Reference(ws, min_col=8, min_row=4, max_row=ws.max_row)
     movingAverageReference200 = Reference(ws, min_col=9, min_row=4, max_row=ws.max_row)
+    upperBandReference = Reference(ws, min_col=11, min_row=4, max_row=ws.max_row)
+    lowerBandReference = Reference(ws, min_col=12, min_row=4, max_row=ws.max_row)
     dates = Reference(ws, min_col=1, min_row=4, max_row=ws.max_row) #same for the dates
 
     chart.add_data(data, titles_from_data=False) #Inputs the data
-    chart.add_data(movingAverageReference10, titles_from_data=False) #Inputs the moving averages onto the chart
+    chart.add_data(movingAverageReference20, titles_from_data=False) #Inputs the moving averages onto the chart
     chart.add_data(movingAverageReference50, titles_from_data=False)
     chart.add_data(movingAverageReference200, titles_from_data=False)
+    chart.add_data(upperBandReference, titles_from_data=False)
+    chart.add_data(lowerBandReference, titles_from_data=False)
 
     chart.series[0].tx = SeriesLabel(v="Stock Close") #Labels the legend
-    chart.series[1].tx = SeriesLabel(v=f"10-day {movingAverageOption}MA")
-    chart.series[2].tx = SeriesLabel(v=f"50-day {movingAverageOption}MA")
-    chart.series[3].tx = SeriesLabel(v=f"200-day {movingAverageOption}MA")
+    chart.series[1].tx = SeriesLabel(v=f"20-day EMA")
+    chart.series[2].tx = SeriesLabel(v=f"50-day EMA")
+    chart.series[3].tx = SeriesLabel(v=f"200-day EMA")
+    chart.series[4].tx = SeriesLabel(v="Upper Band")
+    chart.series[5].tx = SeriesLabel(v="Lower Band")
+    colors = ["000000", "FF2800", "008000", "FFA500", "CF0FFF", "CF0FFF"]
 
-    colors = ["000000", "FF2800", "008000", "FFA500"]
     for i, series in enumerate(chart.series): #Chart lines get visual properties
         series.smooth = False
         series.graphicalProperties.line.solidFill = colors[i]
@@ -178,10 +171,131 @@ while True:
 
     ws["G5"].value = None #Removes an annoying bug
 
-    ws.add_chart(chart, "K2") #Moves the chart to cell L2
+    ws.add_chart(chart, "M8") #Moves the chart to cell M2
+
+    # Adding change summary.
+    if dateOrPeriod == "p":
+        if period == "5d":
+            ws["O2"] = f"=((B{ws.max_row} - B{ws.max_row - 4})/B{ws.max_row - 4})"
+            ws["N2"] = "=IF(O2 > 0,\"Up\", IF(O2 < 0,\"Down\",\"No change\"))"
+
+            ws["M2"] = "Last week"
+        elif period == "1mo" or period == "3mo" or period == "6mo":
+            ws["O2"] = f"=((B{ws.max_row} - B{ws.max_row - 5})/B{ws.max_row - 5})"
+            ws["O3"] = f"=((B{ws.max_row} - B{ws.max_row - 21})/B{ws.max_row - 21})"
+
+            ws["N2"] = "=IF(O2 > 0,\"Up\", IF(O2 < 0,\"Down\",\"No change\"))"
+            ws["N3"] = "=IF(O3 > 0,\"Up\", IF(O3 < 0,\"Down\",\"No change\"))"
+
+            ws["M2"] = "Last week"
+            ws["M3"] = "Last month"
+        elif period == "ytd":
+            ws["O2"] = f"=((B{ws.max_row} - B{ws.max_row - 5})/B{ws.max_row - 5})"
+            ws["O3"] = f"=((B{ws.max_row} - B{ws.max_row - 21})/B{ws.max_row - 21})"
+            ws["O4"] = f"=((B{ws.max_row} - B4)/B4)"
+
+            ws["N2"] = "=IF(O2 > 0,\"Up\", IF(O2 < 0,\"Down\",\"No change\"))"
+            ws["N3"] = "=IF(O3 > 0,\"Up\", IF(O3 < 0,\"Down\",\"No change\"))"
+            ws["N4"] = "=IF(O4 > 0,\"Up\", IF(O4 < 0,\"Down\",\"No change\"))"
+
+            ws["M2"] = "Last week"
+            ws["M3"] = "Last month"
+            ws["M4"] = "To date"
+        elif period == "1y":
+            ws["O2"] = f"=((B{ws.max_row} - B{ws.max_row - 5})/B{ws.max_row - 5})"
+            ws["O3"] = f"=((B{ws.max_row} - B{ws.max_row - 21})/B{ws.max_row - 21})"
+            ws["O4"] = f"=((B{ws.max_row} - B{ws.max_row - 250})/B{ws.max_row - 250})"
+
+            ws["N2"] = "=IF(O2 > 0,\"Up\", IF(O2 < 0,\"Down\",\"No change\"))"
+            ws["N3"] = "=IF(O3 > 0,\"Up\", IF(O3 < 0,\"Down\",\"No change\"))"
+            ws["N4"] = "=IF(O4 > 0,\"Up\", IF(O4 < 0,\"Down\",\"No change\"))"
+
+            ws["M2"] = "Last week"
+            ws["M3"] = "Last month"
+            ws["M4"] = "Past year"
+        else:
+            ws["O2"] = f"=((B{ws.max_row} - B{ws.max_row - 5})/B{ws.max_row - 5})"
+            ws["O3"] = f"=((B{ws.max_row} - B{ws.max_row - 21})/B{ws.max_row - 21})"
+            ws["O4"] = f"=((B{ws.max_row} - B{ws.max_row - 251})/B{ws.max_row - 251})"
+
+            ws["N2"] = "=IF(O2 > 0,\"Up\", IF(O2 < 0,\"Down\",\"No change\"))"
+            ws["N3"] = "=IF(O3 > 0,\"Up\", IF(O3 < 0,\"Down\",\"No change\"))"
+            ws["N4"] = "=IF(O4 > 0,\"Up\", IF(O4 < 0,\"Down\",\"No change\"))"
+
+            ws["M2"] = "Last week"
+            ws["M3"] = "Last month"
+            ws["M4"] = "Past year"
+    else:
+        if ws.max_row >= 251:
+            ws["O2"] = f"=((B{ws.max_row} - B{ws.max_row - 5})/B{ws.max_row - 5})"
+            ws["O3"] = f"=((B{ws.max_row} - B{ws.max_row - 22})/B{ws.max_row - 22})"
+            ws["O4"] = f"=((B{ws.max_row} - B{ws.max_row - 251})/B{ws.max_row - 251})"
+
+            ws["N2"] = "=IF(O2 > 0,\"Up\", IF(O2 < 0,\"Down\",\"No change\"))"
+            ws["N3"] = "=IF(O3 > 0,\"Up\", IF(O3 < 0,\"Down\",\"No change\"))"
+            ws["N4"] = "=IF(O4 > 0,\"Up\", IF(O4 < 0,\"Down\",\"No change\"))"
+
+            ws["M2"] = "Last week"
+            ws["M3"] = "Last month"
+            ws["M4"] = "Past year"
+
+        elif ws.max_row >= 22:
+            ws["O2"] = f"=((B{ws.max_row} - B{ws.max_row - 5})/B{ws.max_row - 5})"
+            ws["O3"] = f"=((B{ws.max_row} - B{ws.max_row - 21})/B{ws.max_row - 21})"
+
+            ws["N2"] = "=IF(O2 > 0,\"Up\", IF(O2 < 0,\"Down\",\"No change\"))"
+            ws["N3"] = "=IF(O3 > 0,\"Up\", IF(O3 < 0,\"Down\",\"No change\"))"
+
+            ws["M2"] = "Last week"
+            ws["M3"] = "Last month"
+        else:
+            ws["O2"] = f"=((B{ws.max_row} - B4)/B4)"
+            ws["N2"] = "=IF(O2 > 0,\"Up\", IF(O2 < 0,\"Down\",\"No change\"))"
+            ws["M2"] = "Last week or less"
+
+    ws["O2"].number_format = '0.00%'
+    ws["O3"].number_format = '0.00%'
+    ws["O4"].number_format = '0.00%'
+
+    stockData["dailyReturns"] = stockData["Close"].pct_change()
+    dailyStandardDeviation = stockData["dailyReturns"].std()
+
+    if ws.max_row >= 256:
+        annualVolatility = dailyStandardDeviation * np.sqrt(252)
+        ws["O7"] = annualVolatility
+        ws["O7"].number_format = '0.00%'
+        ws["M7"] = "Annual volatility"
+
+    ws["O6"] = dailyStandardDeviation
+    ws["O6"].number_format = '0.00%'
+    ws["M6"] = "Daily volatility for the period"
+
+    deathCrossDetect = None
+    goldCrossDetect = None
+
+    for row in range(8, ws.max_row + 1):
+        ema50 = ws[f"H{row}"].value
+        ema200 = ws[f"I{row}"].value
+
+        ema50Yesterday = ws[f"H{row - 1}"].value
+        ema200Yesterday = ws[f"I{row - 1}"].value
+        if None not in (ema50, ema200, ema50Yesterday, ema200Yesterday):
+            if ema50Yesterday > ema200Yesterday and ema50 < ema200:
+                deathCrossDetect = ws[f"A{row}"].value
+                print(f"Death cross occurred on {deathCrossDetect}")
+            if ema50Yesterday < ema200Yesterday and ema50 > ema200:
+                goldCrossDetect = ws[f"A{row}"].value
+                print(f"Golden cross occurred on {goldCrossDetect}")
+    if not deathCrossDetect:
+        print("No death cross occurrences")
+
+    ws["M1"]  = "Summary"
+    ws["M1"].font = copy(ws["F1"].font)
+    ws["M1"].alignment = copy(ws["F1"].alignment)
+    ws["M1"].fill = copy(ws["F1"].fill)
+    ws.column_dimensions["M"].width = maxLength + 6
 
     wb.save(fileName) #Saves the current workbook under the above filename
     print(f"Data successfully saved to {fileName}")
 
     break
-    #What to do next: Add bollinger bands and other features 
